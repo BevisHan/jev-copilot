@@ -1,8 +1,11 @@
 services:
   jev-copilot:
-    # Built and published by .github/workflows/image.yml. Replace OWNER with your
-    # GitHub username, or set JEV_IMAGE in a .env next to this file.
-    image: ${JEV_IMAGE:-ghcr.io/OWNER/jev-copilot:latest}
+    # Built and published by .github/workflows/image.yml.
+    #
+    # Lowercase on purpose: GHCR rejects uppercase paths, so the workflow
+    # publishes BevisHan/jev-copilot as bevishan/jev-copilot. Override with
+    # JEV_IMAGE in a .env next to this file if you fork it elsewhere.
+    image: ${JEV_IMAGE:-ghcr.io/bevishan/jev-copilot:latest}
     pull_policy: always
     container_name: jev-copilot
     restart: unless-stopped
