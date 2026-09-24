@@ -1,0 +1,24 @@
+/target
+
+# Never commit environment files. This project's .env holds only endpoints and
+# model names today, but `git add .` should not be the thing standing between a
+# future key and a public repo.
+.env
+.env.*
+
+# Local test harness: fixture, e2e runner, model benches, question matrix.
+# Useful to keep around but not part of the project.
+_fixture.html
+_e2e.ps1
+_bench.ps1
+_draft-bench.ps1
+_draft-case.json
+_action-bench.ps1
+_action-cases.json
+
+# Their outputs.
+_*.log
+_*-result.json
+_draft-bench.json
+_draft-quality.txt
+_summary.txt

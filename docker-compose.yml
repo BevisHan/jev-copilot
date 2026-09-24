@@ -1,0 +1,48 @@
+services:
+  jev-copilot:
+    # Built and published by .github/workflows/image.yml. Replace OWNER with your
+    # GitHub username, or set JEV_IMAGE in a .env next to this file.
+    image: ${JEV_IMAGE:-ghcr.io/OWNER/jev-copilot:latest}
+    pull_policy: always
+    container_name: jev-copilot
+    restart: unless-stopped
+
+    # Uncomment to build from source on this machine instead of pulling.
+    # build: .
+
+    # Reachable from anywhere on the LAN. There is no password on this page, so
+    # anyone on your network can open it -- they still have to supply their own
+    # OpenRouter key, but the page itself is open.
+    #
+    # Change to "127.0.0.1:8778:8778" to make it NAS-local only, reachable purely
+    # through the tunnel below.
+    #
+    # Never expose this port through the router, UPnP, or the NAS port-forwarding
+    # page. Public access goes through the tunnel, which needs no open port.
+    ports:
+      - "8778:8778"
+
+    # The process holds no credentials, writes no files, and keeps no state
+    # between requests, so it can be locked down hard.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+  # Public access without opening a single port. Start it with:
+  #   docker compose --profile tunnel up -d
+  #
+  # Set up first at one.dash.cloudflare.com: create a tunnel, point a public
+  # hostname at http://jev-copilot:8778, then put an Access policy on that
+  # hostname so the page is not open to the whole internet. TLS terminates at
+  # Cloudflare, which is what makes sending an API key over this safe.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: jev-cloudflared
+    profiles: [tunnel]
+    restart: unless-stopped
+    # Deliberately unpinned: Cloudflare retires old connectors, so this one has
+    # to track upstream rather than freeze.
+    command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN}
+    depends_on:
+      - jev-copilot

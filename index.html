@@ -1,0 +1,1843 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jev 对话副驾</title>
+<link rel="icon" href="data:,">
+
+<style>
+  :root {
+    --bg: #0b0d12;
+    --panel: #141821;
+    --panel-2: #1b202b;
+    --line: #262c3a;
+    --text: #e7eaf2;
+    --dim: #8c94a8;
+    --faint: #596174;
+    --accent: #5eead4;
+    --accent-dim: #2b6b61;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --me: #3f7a6f;
+    --other: #4a5470;
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    display: flex; flex-direction: column;
+    font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 14px; flex: 0 0 auto;
+    padding: 14px 20px; border-bottom: 1px solid var(--line);
+  }
+  header h1 { margin: 0; font-size: 15px; letter-spacing: .03em; }
+  header .meta { color: var(--faint); font: 11.5px var(--mono); }
+  header .spacer { flex: 1; }
+  main {
+    display: grid; grid-template-columns: minmax(400px, 46%) 1fr;
+    flex: 1 1 auto; min-height: 0;
+  }
+  .left { border-right: 1px solid var(--line); overflow-y: auto; padding: 16px; }
+  .right { overflow-y: auto; padding: 16px 20px; background: #090b0f; }
+
+  .block { margin-bottom: 18px; }
+  .block > .lbl {
+    display: block; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .09em; color: var(--dim); margin-bottom: 7px;
+  }
+  .block > .lbl .sub { text-transform: none; letter-spacing: 0; color: var(--faint); }
+  textarea, input, select {
+    width: 100%; background: var(--panel); border: 1px solid var(--line);
+    color: var(--text); border-radius: 6px; padding: 8px 10px;
+    font-family: inherit; font-size: 13px;
+  }
+  textarea { resize: vertical; line-height: 1.55; }
+
+  /* The default scrollbar renders light-on-dark here, which reads as a bright
+     stripe down every box. Tint it to match the panels. */
+  * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line); border-radius: 5px;
+    border: 2px solid transparent; background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--faint); background-clip: content-box; }
+  ::-webkit-scrollbar-corner { background: transparent; }
+  textarea:focus, input:focus, select:focus { outline: none; border-color: var(--accent-dim); }
+  :focus-visible { outline: 2px solid var(--accent-dim); outline-offset: 1px; }
+  .hint { color: var(--faint); font-size: 11.5px; margin-top: 5px; }
+  .sr {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+
+  /* screenshot drop zone */
+  .drop {
+    border: 1.5px dashed var(--line); border-radius: 9px;
+    padding: 20px 16px; text-align: center; cursor: pointer;
+    transition: border-color .18s, background .18s;
+  }
+  .drop:hover, .drop.over { border-color: var(--accent-dim); background: rgba(94,234,212,.04); }
+  .drop[aria-disabled="true"] { opacity: .5; cursor: default; }
+  .drop-main { font-size: 13px; color: var(--dim); }
+  .drop-main b { color: var(--accent); font-weight: 600; }
+  .drop-sub { font-size: 11.5px; color: var(--faint); margin-top: 4px; }
+  .shot { margin-top: 10px; position: relative; }
+  .shot img {
+    max-width: 100%; max-height: 220px; border-radius: 7px;
+    border: 1px solid var(--line); display: block;
+  }
+  .shot button {
+    position: absolute; top: 6px; right: 6px;
+    width: 24px; height: 24px; padding: 0; border-radius: 5px;
+    background: rgba(9,11,15,.85); border: 1px solid var(--line);
+    color: var(--dim); cursor: pointer;
+  }
+  .shot button:hover { color: var(--bad); border-color: var(--bad); }
+  .vision-note {
+    margin-top: 8px; font-size: 11.5px; color: var(--faint);
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; padding: 7px 9px;
+  }
+  .vision-note b { color: var(--warn); }
+
+  /* conversation editor */
+  .turn { display: grid; grid-template-columns: 74px 1fr 24px; gap: 6px; margin-bottom: 5px; align-items: start; }
+  .turn-mid { min-width: 0; }
+  .turn select { font-size: 12px; padding: 5px 6px; }
+  /* Height is driven by autosize(), so the manual resize grip is both useless and
+     visually noisy on every row. */
+  .turn textarea { font-size: 12.5px; min-height: 30px; max-height: 200px; resize: none; }
+  .turn button {
+    width: 24px; height: 30px; padding: 0; background: transparent;
+    border: 1px solid var(--line); color: var(--faint); border-radius: 5px; cursor: pointer;
+  }
+  .turn button:hover { color: var(--bad); border-color: var(--bad); }
+  .turn.me textarea { border-left: 2px solid var(--me); }
+  .turn.other textarea { border-left: 2px solid var(--other); }
+  .turn.flagged textarea { border-left-color: var(--warn); }
+  .turn.judged textarea { box-shadow: inset 3px 0 0 -1px var(--accent-dim), 0 0 0 1px var(--accent-dim); }
+  .turn-add { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
+  .turns-note { color: var(--faint); font-size: 11.5px; margin-top: 7px; }
+  .turns-note b { color: var(--accent-dim); }
+  .turn-name {
+    font-size: 10.5px; color: var(--dim); margin-bottom: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .turn.me .turn-name { color: var(--accent); }
+
+  /* source tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 9px; }
+  .tabs button {
+    background: transparent; border: 1px solid var(--line); color: var(--dim);
+    border-radius: 6px; padding: 5px 13px; font-size: 12px; cursor: pointer;
+  }
+  .tabs button[aria-selected="true"] {
+    border-color: var(--accent-dim); color: var(--accent);
+    background: rgba(94,234,212,.05);
+  }
+  .import-foot {
+    display: flex; align-items: center; gap: 9px; margin-top: 8px;
+  }
+  .import-foot .count { font: 11px var(--mono); color: var(--faint); }
+  .import-foot .count.over { color: var(--bad); }
+  .import-foot .spacer { flex: 1; }
+  #importText { min-height: 120px; max-height: 320px; font-size: 12.5px; }
+
+  /* who is me / bulk bar */
+  .whoami {
+    display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+    background: rgba(94,234,212,.05); border: 1px solid var(--accent-dim);
+    border-radius: 7px; padding: 8px 10px; margin-bottom: 9px; font-size: 12px;
+  }
+  .whoami.settled { background: var(--panel); border-color: var(--line); }
+  .whoami .q { color: var(--text); }
+  .whoami.settled .q { color: var(--dim); }
+  .whoami button {
+    background: transparent; border: 1px solid var(--line); color: var(--dim);
+    border-radius: 5px; padding: 3px 10px; font-size: 12px; cursor: pointer;
+  }
+  .whoami button:hover { border-color: var(--accent-dim); color: var(--text); }
+  .whoami button[aria-pressed="true"] {
+    border-color: var(--accent); color: var(--accent); background: rgba(94,234,212,.08);
+  }
+  .turns-bar {
+    display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+    margin-bottom: 7px; font: 11px var(--mono); color: var(--faint);
+  }
+  .turns-bar .spacer { flex: 1; }
+  .turns-bar button {
+    background: transparent; border: 1px solid var(--line); color: var(--dim);
+    border-radius: 5px; padding: 3px 9px; font: 11px var(--mono); cursor: pointer;
+  }
+  .turns-bar button:hover { border-color: var(--accent-dim); color: var(--text); }
+  .turns-bar .warn { color: var(--warn); }
+  .fold {
+    text-align: center; border: 1px dashed var(--line); border-radius: 7px;
+    padding: 7px 10px; margin-bottom: 6px; font-size: 11.5px; color: var(--faint);
+  }
+  .fold button {
+    background: transparent; border: none; color: var(--accent);
+    font-size: 11.5px; cursor: pointer; padding: 0 4px; text-decoration: underline;
+  }
+
+  /* keep the primary action reachable no matter how long the list is */
+  .actions {
+    position: sticky; bottom: -16px; z-index: 5;
+    margin: 0 -16px -16px; padding: 12px 16px 16px;
+    background: linear-gradient(to bottom, rgba(11,13,18,0), var(--bg) 22%);
+  }
+
+  button.primary {
+    background: var(--accent); color: #062521; border: none; border-radius: 6px;
+    padding: 10px 22px; font-weight: 650; font-size: 13.5px; cursor: pointer;
+  }
+  button.primary:disabled { opacity: .4; cursor: default; }
+  button.ghost {
+    background: transparent; border: 1px solid var(--line); color: var(--dim);
+    border-radius: 6px; padding: 7px 12px; font-size: 12px; cursor: pointer;
+  }
+  button.ghost:hover:not(:disabled) { border-color: var(--accent-dim); color: var(--text); }
+  button.ghost:disabled { opacity: .4; cursor: default; }
+  .actions { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
+  .actions .hint { margin: 0; }
+  .cost-warn {
+    font-size: 11px; color: var(--warn);
+    border: 1px solid rgba(251,191,36,.3); border-radius: 5px; padding: 2px 7px;
+  }
+  .shortcut {
+    font: 10.5px var(--mono); color: var(--faint);
+    border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px;
+  }
+
+  /* verdict */
+  .empty { color: var(--faint); text-align: center; margin-top: 70px; font-size: 13px; }
+  .stage { font: 11.5px var(--mono); color: var(--faint); margin-bottom: 12px; }
+  .stage b { color: var(--accent); font-weight: 600; }
+
+  .danger {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-left: 3px solid var(--accent-dim);
+    border-radius: 8px; padding: 12px 14px; margin-bottom: 12px;
+  }
+  .danger.lvl2 { border-left-color: var(--warn); }
+  .danger.lvl3 { border-left-color: var(--bad); }
+  .danger-num { font-size: 26px; font-weight: 700; line-height: 1; }
+  .danger.lvl2 .danger-num { color: var(--warn); }
+  .danger.lvl3 .danger-num { color: var(--bad); }
+  .danger-txt { flex: 1; }
+  .danger-txt .t { font-size: 13.5px; font-weight: 600; }
+  .danger-txt .s { font-size: 11.5px; color: var(--faint); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 9px; margin-bottom: 14px; }
+  .cell {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 10px 12px;
+  }
+  .cell .k {
+    font: 10px var(--mono); text-transform: uppercase; letter-spacing: .08em;
+    color: var(--faint); margin-bottom: 3px;
+  }
+  .cell .v { font-size: 14px; font-weight: 600; }
+  .cell .v small { font-size: 11px; font-weight: 400; color: var(--faint); margin-left: 6px; }
+  .cell .track { height: 4px; background: var(--panel-2); border-radius: 3px; margin-top: 7px; overflow: hidden; }
+  .cell .fill { height: 100%; background: var(--accent-dim); border-radius: 3px; transition: width .3s; }
+  .cell.shaky .fill { background: var(--warn); }
+  .cell.shaky .v { color: var(--warn); }
+
+  /* drafts */
+  .drafts-head {
+    display: flex; align-items: baseline; gap: 10px;
+    margin: 18px 0 9px; padding-top: 14px; border-top: 1px solid var(--line);
+  }
+  .drafts-head h2 { margin: 0; font-size: 13px; letter-spacing: .04em; }
+  .drafts-head .n { font: 11.5px var(--mono); color: var(--faint); }
+  .draft {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 12px 14px; margin-bottom: 9px;
+  }
+  .draft.best { border-color: var(--accent-dim); background: rgba(94,234,212,.03); }
+  .draft-top { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .draft-rank { font: 11px var(--mono); color: var(--faint); }
+  .draft.best .draft-rank { color: var(--accent); }
+  .badge {
+    font-size: 10px; letter-spacing: .06em; color: #062521;
+    background: var(--accent); border-radius: 4px; padding: 1px 6px; font-weight: 700;
+  }
+  .badge.edited { background: var(--warn); }
+  .draft-p { margin-left: auto; font: 11px var(--mono); color: var(--faint); }
+  .draft-body { font-size: 13.5px; white-space: pre-wrap; line-height: 1.6; }
+  .draft-edit {
+    font-size: 13.5px; line-height: 1.6; min-height: 60px; max-height: 260px;
+    background: var(--panel-2); resize: none;
+  }
+  .draft-acts { display: flex; gap: 6px; margin-top: 10px; }
+  .draft-acts button { font-size: 11.5px; padding: 5px 11px; }
+  .copied { color: var(--accent) !important; border-color: var(--accent-dim) !important; }
+
+  /* skeleton */
+  .skel-card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 12px 14px; margin-bottom: 9px;
+  }
+  .skel-line {
+    height: 10px; border-radius: 5px; margin-bottom: 8px;
+    background: linear-gradient(90deg, var(--panel-2) 25%, #232936 37%, var(--panel-2) 63%);
+    background-size: 400% 100%; animation: shimmer 1.4s ease infinite;
+  }
+  .skel-line:last-child { margin-bottom: 0; }
+  @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+
+  .warnbar {
+    background: rgba(251,191,36,.07); border: 1px solid rgba(251,191,36,.28);
+    color: #fcd34d; border-radius: 7px; padding: 9px 12px;
+    font-size: 12px; margin-bottom: 12px;
+  }
+  .err {
+    background: rgba(248,113,113,.07); border: 1px solid rgba(248,113,113,.28);
+    color: #fca5a5; border-radius: 8px; padding: 12px 14px;
+    font: 12px var(--mono); white-space: pre-wrap; word-break: break-word;
+    margin-bottom: 12px;
+  }
+  .err .retry { margin-top: 10px; display: flex; gap: 6px; }
+  .err .retry button {
+    font: 11.5px var(--mono); padding: 5px 11px; cursor: pointer;
+    background: transparent; border: 1px solid rgba(248,113,113,.4);
+    color: #fca5a5; border-radius: 6px;
+  }
+  .err .retry button:hover { border-color: var(--bad); color: var(--text); }
+  .err.soft { background: rgba(251,191,36,.06); border-color: rgba(251,191,36,.28); color: #fcd34d; }
+  .raw { margin-top: 14px; }
+  .raw summary { color: var(--faint); font-size: 11.5px; cursor: pointer; }
+  .raw pre {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 7px;
+    padding: 11px; overflow-x: auto; font: 11px var(--mono); color: var(--dim);
+  }
+  /* settings modal */
+  header button.gear {
+    background: transparent; border: 1px solid var(--line); color: var(--dim);
+    border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+  }
+  header button.gear:hover { border-color: var(--accent-dim); color: var(--text); }
+  header button.gear.missing { border-color: var(--warn); color: var(--warn); }
+  .modal {
+    position: fixed; inset: 0; z-index: 50; display: flex;
+    align-items: center; justify-content: center; padding: 20px;
+    background: rgba(5,7,10,.72);
+  }
+  /* An author `display` declaration beats the UA rule behind the `hidden`
+     attribute, so `hidden` would otherwise have no effect on this element. */
+  .modal[hidden] { display: none; }
+  .modal-card {
+    width: 100%; max-width: 470px; max-height: 90vh; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 11px; padding: 18px 20px;
+  }
+  .modal-card h2 { margin: 0 0 4px; font-size: 14.5px; letter-spacing: .03em; }
+  .modal-note {
+    margin: 0 0 14px; font-size: 11.5px; line-height: 1.7; color: var(--faint);
+  }
+  .modal-note b { color: var(--dim); font-weight: 600; }
+  .modal-card label {
+    display: block; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .09em; color: var(--dim); margin: 14px 0 6px;
+  }
+  .key-row { display: flex; gap: 6px; }
+  .key-row input { font: 12.5px var(--mono); }
+  .key-row button { flex: 0 0 auto; }
+  .modal-card details { margin-top: 16px; }
+  .modal-card details summary {
+    color: var(--faint); font-size: 11.5px; cursor: pointer; margin-bottom: 4px;
+  }
+  .modal-card details label { margin-top: 10px; }
+  .modal-acts {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line);
+  }
+  .modal-acts .spacer { flex: 1; }
+  .probe {
+    margin-top: 10px; font-size: 11.5px; line-height: 1.6;
+    border-radius: 6px; padding: 8px 10px;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--dim);
+  }
+  .probe.ok { border-color: var(--accent-dim); color: var(--accent); }
+  .probe.bad { border-color: rgba(248,113,113,.4); color: #fca5a5; }
+  .probe .sub { color: var(--faint); }
+
+  .spin { display: inline-block; animation: sp 1s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .spin, .skel-line { animation: none; }
+  }
+  @media (max-width: 950px) {
+    body { height: auto; }
+    main { grid-template-columns: 1fr; }
+    .left { border-right: none; border-bottom: 1px solid var(--line); }
+    .left, .right { overflow-y: visible; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Jev 对话副驾</h1>
+  <div class="meta" id="meta">loading…</div>
+  <div class="spacer"></div>
+  <div class="meta">回复永不自动发送</div>
+  <button class="gear" id="gear" type="button" aria-haspopup="dialog">⚙ 设置</button>
+</header>
+
+<div class="modal" id="settings" hidden role="dialog" aria-modal="true" aria-labelledby="settings-title">
+  <div class="modal-card">
+    <h2 id="settings-title">你的 OpenRouter Key</h2>
+    <p class="modal-note">
+      每个人用自己的 Key，各自计费、互不影响。Key <b>只存在这台浏览器的 localStorage</b>，
+      服务器不保存、不写日志 —— 但转发请求时会在内存里短暂经过它，这是代理绕不开的。<br>
+      共用电脑请用完点「清除 Key」。
+    </p>
+
+    <label for="keyInput">API Key</label>
+    <div class="key-row">
+      <input type="password" id="keyInput" autocomplete="off" spellcheck="false"
+             placeholder="sk-or-v1-…">
+      <button class="ghost" type="button" id="keyReveal" aria-label="显示或隐藏 Key">显示</button>
+    </div>
+    <div class="hint">没有 Key？到 openrouter.ai/keys 建一个，充值几美元够用很久。</div>
+    <div id="probeOut"></div>
+
+    <details id="modelBox">
+      <summary>模型（可选，留空用默认）</summary>
+      <label for="judgeModel">判断模型</label>
+      <input type="text" id="judgeModel" autocomplete="off" spellcheck="false">
+      <label for="draftModel">起草模型</label>
+      <input type="text" id="draftModel" autocomplete="off" spellcheck="false">
+      <label for="visionModel">视觉模型</label>
+      <input type="text" id="visionModel" autocomplete="off" spellcheck="false">
+    </details>
+
+    <div class="modal-acts">
+      <button class="primary" type="button" id="saveSettings">保存</button>
+      <button class="ghost" type="button" id="probeBtn">测试连通</button>
+      <span class="spacer"></span>
+      <button class="ghost" type="button" id="clearKey">清除 Key</button>
+      <button class="ghost" type="button" id="closeSettings">关闭</button>
+    </div>
+  </div>
+</div>
+<main>
+  <section class="left">
+    <div class="block" role="group" aria-labelledby="lbl-shot">
+      <span class="lbl" id="lbl-shot">1 · 对话来源</span>
+      <div class="tabs" role="tablist" aria-label="对话来源">
+        <button type="button" role="tab" id="tab-shot" data-tab="shot"
+                aria-selected="true" aria-controls="pane-shot">截图</button>
+        <button type="button" role="tab" id="tab-text" data-tab="text"
+                aria-selected="false" aria-controls="pane-text">粘贴文本</button>
+      </div>
+
+      <div id="pane-shot" role="tabpanel" aria-labelledby="tab-shot">
+        <div class="drop" id="drop" role="button" tabindex="0"
+             aria-label="选择聊天截图" aria-describedby="drop-sub">
+          <div class="drop-main" id="drop-main">按 <b>Ctrl+V</b> 粘贴截图</div>
+          <div class="drop-sub" id="drop-sub">也可以拖进来，或点击选择文件</div>
+        </div>
+        <input type="file" id="file" accept="image/*" style="display:none" tabindex="-1">
+        <div id="shotError"></div>
+        <div id="shot"></div>
+      </div>
+
+      <div id="pane-text" role="tabpanel" aria-labelledby="tab-text" hidden>
+        <textarea id="importText" rows="7" aria-label="粘贴聊天记录"
+          placeholder="把聊天记录复制进来，昵称、时间、正文都可以一起贴。&#10;时间戳会自动丢掉，同一个人连发的多条会各自保留。"></textarea>
+        <div class="import-foot">
+          <span class="count" id="importCount"></span>
+          <span class="spacer"></span>
+          <button class="ghost" type="button" id="importClear">清空文本</button>
+          <button class="ghost" type="button" id="importRun">识别</button>
+        </div>
+        <div id="importError"></div>
+        <div id="importSummary"></div>
+      </div>
+    </div>
+
+    <div class="block" role="group" aria-labelledby="lbl-turns">
+      <span class="lbl" id="lbl-turns">2 · 对话 <span class="sub">识别结果可以直接改</span></span>
+      <div id="whoami"></div>
+      <div id="turnsBar"></div>
+      <div id="fold"></div>
+      <div id="turns"></div>
+      <div class="turn-add">
+        <button class="ghost" data-speaker="other">+ 对方</button>
+        <button class="ghost" data-speaker="me">+ 我</button>
+        <button class="ghost" id="invert">反转说话人</button>
+        <button class="ghost" id="clear">清空</button>
+      </div>
+      <div class="turns-note" id="turnsNote"></div>
+    </div>
+
+    <div class="block">
+      <label class="lbl" for="background">3 · 背景（可选）</label>
+      <textarea id="background" rows="3"
+        placeholder="这个人是谁、你和他的关系、相关的事实约定。会随判断一起发给模型，回复不会和这里矛盾。"></textarea>
+    </div>
+
+    <div class="actions">
+      <button class="primary" id="run">分析并起草</button>
+      <button class="ghost" id="cancel" hidden>取消</button>
+      <span class="shortcut" id="shortcut">Ctrl + Enter</span>
+      <span class="cost-warn" id="costWarn" hidden></span>
+      <span class="hint" id="status" role="status" aria-live="polite"></span>
+    </div>
+  </section>
+
+  <section class="right">
+    <div id="outEmpty" class="empty">粘贴一张聊天截图，或手动录入对话</div>
+    <div id="outError" role="alert"></div>
+    <div id="outVerdict"></div>
+    <div id="outDrafts"></div>
+    <div id="outRaw"></div>
+  </section>
+</main>
+<script>
+// Labels mirror the criteria keys in src/questions.rs. Keep them in sync.
+const LABEL = {
+  intent: {
+    ask_info: '询问信息', request_action: '要你办事', push_decision: '催你表态',
+    complain: '抱怨指责', socialize: '寒暄闲聊', sell: '推销营销',
+    probe_money: '试探钱财隐私', other: '其它'
+  },
+  wants: {
+    an_answer: '一个答复', a_commitment: '一个承诺', an_action: '你去执行',
+    emotional_response: '情绪回应', money_or_access: '钱或权限', nothing_specific: '没有具体诉求'
+  },
+  best_action: {
+    comply: '照办', comply_partly: '先给一部分', ask_clarify: '先反问清楚',
+    buy_time: '先应一声', decline: '明确拒绝', escalate: '转交或换渠道',
+    ignore: '不要接这个话头'
+  },
+  counterpart_style: { casual: '随意口语', businesslike: '公事公办', terse: '极简指令', emotional: '带情绪' }
+};
+const DANGER = ['不涉敏感内容', '常规工作约定', '涉及金额或权限', '疑似诈骗或逼迫'];
+const PRESSURE = ['没有施压', '有催促', '强烈施压'];
+const SPEAKER = { other: '对方', me: '我' };
+const STORE_KEY = 'jev-copilot:input:v1';
+
+const el = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// A turn carries the nickname separately from the text. Folding it into the text
+// (as an earlier version did) sent "张三：内容" to the judge as if the name were
+// part of what was said, and made speaker reassignment impossible.
+let turns = [];
+let flagged = new Set();
+let imageData = null;
+let verdict = null;
+/// Which nickname is the user, and whether that was actually chosen. The two are
+/// distinct: an empty name after choosing means "none of these is me", while an
+/// empty name before choosing means the attribution is still unresolved -- and in
+/// that state every turn reads as the other party, which the UI must not present
+/// as a normal result.
+let meName = '';
+let meDecided = false;
+/// A pasted transcript can run to hundreds of messages. Rendering them all costs
+/// a forced layout per row and buries the rest of the form, while the judgement
+/// only ever looks at the tail. So show the tail and fold the rest away; the
+/// folded turns are still sent, which is why the count is stated explicitly.
+const FOLD_VISIBLE = 12;
+const FOLD_THRESHOLD = 16;
+let foldOpen = false;
+
+// One request at a time. `busy` names the stage so the UI can label it, and the
+// abort controllers let the user get out of a slow call instead of waiting for
+// the 60-90s upstream timeout.
+let busy = null;
+let visionAbort = null;
+let visionToken = 0;
+let importAbort = null;
+let runAbort = null;
+/// Must match MAX_IMPORT_CHARS in src/main.rs: the browser should reject an
+/// oversized paste before it becomes a request.
+const IMPORT_LIMIT = 20000;
+
+/* ---------- busy state ---------- */
+
+function setStatus(text, spinning) {
+  el('status').innerHTML = spinning ? `<span class="spin">◠</span> ${esc(text)}` : esc(text);
+}
+
+function setBusy(stage) {
+  busy = stage;
+  el('cancel').hidden = !stage;
+  el('drop').setAttribute(
+    'aria-disabled',
+    stage === 'vision' || !hasKey() ? 'true' : 'false',
+  );
+  updateRunState();
+  updateImportCount();
+}
+
+function hasContent() {
+  return turns.some((turn) => turn.text.trim());
+}
+
+function updateRunState() {
+  const runnable = hasContent() && hasKey() && !busy;
+  el('run').disabled = !runnable;
+  el('run').title = !hasKey() ? '先在设置里填入你的 OpenRouter Key'
+    : !hasContent() ? '先录入至少一条对话' : '';
+  el('shortcut').style.opacity = runnable ? '1' : '.4';
+
+  // Every turn is sent and billed, including the folded ones. Say so before the
+  // click rather than after the invoice.
+  const count = turns.filter((turn) => turn.text.trim()).length;
+  const warn = el('costWarn');
+  warn.hidden = count <= 40;
+  warn.textContent = warn.hidden ? '' : `${count} 条会一起发给模型`;
+  warn.title = '判断只看对方最后几条，历史越长越费 token。可以用「只留最后 20 条」裁剪。';
+}
+
+function cancelAll(reason) {
+  visionToken += 1;
+  visionAbort?.abort(reason);
+  importAbort?.abort(reason);
+  runAbort?.abort(reason);
+  visionAbort = null;
+  importAbort = null;
+  runAbort = null;
+  setBusy(null);
+  setStatus('已取消');
+}
+
+/* ---------- persistence ---------- */
+
+let persistTimer = null;
+
+function persist() {
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify({
+        turns,
+        flagged: [...flagged],
+        meName,
+        meDecided,
+        background: el('background').value,
+      }));
+    } catch {
+      // Private mode or a full quota: losing the draft is acceptable, blocking is not.
+    }
+  }, 400);
+}
+
+function restore() {
+  let saved;
+  try {
+    saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+  } catch {
+    return;
+  }
+  if (!saved) return;
+  if (Array.isArray(saved.turns)) {
+    turns = saved.turns
+      .filter((turn) => turn && typeof turn.text === 'string')
+      .map((turn) => ({
+        speaker: turn.speaker === 'me' ? 'me' : 'other',
+        // Entries saved before nicknames existed simply have none.
+        name: typeof turn.name === 'string' ? turn.name : '',
+        text: turn.text,
+      }));
+  }
+  if (Array.isArray(saved.flagged)) flagged = new Set(saved.flagged.map(Number));
+  if (typeof saved.meName === 'string') meName = saved.meName;
+  meDecided = saved.meDecided === true;
+  if (typeof saved.background === 'string') el('background').value = saved.background;
+}
+
+/* ---------- screenshot ---------- */
+
+function shotError(message, detail) {
+  el('shotError').innerHTML = message
+    ? `<div class="err">${esc(message)}${detail ? `\n\n${esc(detail)}` : ''}
+         <div class="retry"><button type="button" id="shotRetry">重新识别</button></div>
+       </div>`
+    : '';
+  const retry = el('shotRetry');
+  if (retry) retry.onclick = () => { if (imageData) readScreenshot(imageData); };
+}
+
+function showShot(dataUrl) {
+  imageData = dataUrl;
+  el('shot').innerHTML = `<div class="shot">
+    <img src="${esc(dataUrl)}" alt="待识别的聊天截图">
+    <button type="button" aria-label="移除截图" title="移除截图">&times;</button>
+  </div>`;
+  el('shot').querySelector('button').onclick = removeShot;
+}
+
+// Removing the image also drops the marks that belong to it: the "model was
+// unsure about line 3" hint is meaningless once the source is gone. The turns
+// themselves stay, because the user may have edited them by hand.
+function removeShot() {
+  if (busy === 'vision') cancelAll('screenshot removed');
+  imageData = null;
+  el('shot').innerHTML = '';
+  shotError('');
+  if (flagged.size) {
+    flagged.clear();
+    renderTurns();
+  }
+  setStatus('截图已移除，对话内容保留');
+  persist();
+}
+
+async function readScreenshot(dataUrl) {
+  // Last paste wins, explicitly: cancel the in-flight call and ignore its result
+  // even if it lands after this one.
+  visionAbort?.abort('superseded');
+  const token = (visionToken += 1);
+  const controller = new AbortController();
+  visionAbort = controller;
+
+  showShot(dataUrl);
+  shotError('');
+  setBusy('vision');
+  setStatus('识别截图…', true);
+  try {
+    const response = await apiFetch('/api/vision', {
+      method: 'POST',
+      body: JSON.stringify(withModels({ image: dataUrl }, 'vision')),
+      signal: controller.signal,
+    });
+    const data = await response.json();
+    if (token !== visionToken) return;
+    if (!response.ok || data.error) {
+      if (handledNeedKey(data)) return;
+      shotError(`截图识别失败：${data.error || response.status}`, data.detail || '');
+      return;
+    }
+    el('shot').insertAdjacentHTML('beforeend', applyRecognised(data));
+  } catch (error) {
+    if (token !== visionToken || error.name === 'AbortError') return;
+    shotError(`识别请求失败：${error.message}`);
+  } finally {
+    if (token === visionToken) {
+      visionAbort = null;
+      setBusy(null);
+      setStatus('');
+    }
+  }
+}
+
+/// Land a recognition result, whichever route produced it, and return the summary
+/// markup the caller places next to its own input. Screenshots and pasted text
+/// share this so the two paths cannot drift.
+function applyRecognised(data) {
+  turns = (data.conversation || []).map((turn) => ({
+    speaker: turn.speaker === 'me' ? 'me' : 'other',
+    name: (turn.name || '').trim(),
+    text: turn.text,
+  }));
+  // The model reports which lines it was unsure about; mark them for review.
+  flagged = new Set((data.uncertain || [])
+    .map((n) => Number(n) - 1)
+    .filter((n) => Number.isInteger(n) && n >= 0 && n < turns.length));
+  meName = '';
+  meDecided = false;
+  foldOpen = false;
+  renderTurns();
+  updateRunState();
+  refreshGating();
+  persist();
+
+  const cost = data.usage?.cost != null ? `$${Number(data.usage.cost).toFixed(5)}` : '';
+  const bits = [`识别出 ${turns.length} 条`, `${data.latency_ms}ms`, cost].filter(Boolean);
+  let note = `<div class="vision-note">${esc(bits.join(' · '))}`;
+  if (data.note) note += `<br>${esc(data.note)}`;
+  if (distinctNames().length >= 2) note += '<br><b>请在下面指定哪个昵称是你</b>';
+  if (flagged.size) note += `<br><b>有 ${flagged.size} 条模型不确定，黄色边框标出，请核对</b>`;
+  note += '</div>';
+  return note;
+}
+
+/* ---------- pasted transcript ---------- */
+
+function importError(message, detail) {
+  el('importError').innerHTML = message
+    ? `<div class="err">${esc(message)}${detail ? `\n\n${esc(detail)}` : ''}</div>`
+    : '';
+}
+
+function updateImportCount() {
+  const length = el('importText').value.length;
+  const node = el('importCount');
+  const over = length > IMPORT_LIMIT;
+  node.className = `count${over ? ' over' : ''}`;
+  node.textContent = length ? `${length.toLocaleString()} / ${IMPORT_LIMIT.toLocaleString()} 字` : '';
+  el('importRun').disabled = !length || over || !!busy;
+  el('importRun').title = over ? '超出长度上限，只贴相关的那一段' : '';
+}
+
+async function runImport() {
+  const text = el('importText').value.trim();
+  if (!text) return;
+  if (!hasKey()) {
+    openSettings('识别聊天记录要用你自己的 Key，先填在这里');
+    return;
+  }
+  if (text.length > IMPORT_LIMIT) return;
+
+  importAbort?.abort('superseded');
+  const controller = new AbortController();
+  importAbort = controller;
+  importError('');
+  setBusy('import');
+  setStatus('识别聊天记录…', true);
+  el('importSummary').innerHTML = '';
+  try {
+    const response = await apiFetch('/api/import', {
+      method: 'POST',
+      body: JSON.stringify(withModels({ text }, 'draft')),
+      signal: controller.signal,
+    });
+    const data = await response.json();
+    if (!response.ok || data.error) {
+      if (handledNeedKey(data)) return;
+      importError(`识别失败：${data.error || response.status}`, data.detail || '');
+      return;
+    }
+    el('importSummary').innerHTML = applyRecognised(data);
+    // The raw paste has served its purpose and would otherwise keep a wall of
+    // text on screen above the list the user now needs to work with.
+    el('importText').value = '';
+    updateImportCount();
+  } catch (error) {
+    if (error.name === 'AbortError') return;
+    importError(`识别请求失败：${error.message}`);
+  } finally {
+    if (importAbort === controller) {
+      importAbort = null;
+      setBusy(null);
+      setStatus('');
+    }
+  }
+}
+
+function acceptFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  if (!hasKey()) {
+    openSettings('识别截图要用你自己的 Key，先填在这里');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => readScreenshot(reader.result);
+  reader.onerror = () => shotError('读取图片失败，换一张试试');
+  reader.readAsDataURL(file);
+}
+
+/* ---------- conversation editor ---------- */
+
+/// Grow a textarea to fit its content, up to `max`.
+///
+/// The obvious `height = scrollHeight` is wrong under `box-sizing: border-box`:
+/// `scrollHeight` covers content plus padding but not the border, while `height`
+/// has to cover the border too. The content box therefore ends up two pixels
+/// short and the textarea shows a scrollbar even for a single line. Measuring
+/// `offsetHeight - clientHeight` recovers exactly that difference (borders, plus
+/// a horizontal scrollbar if one is present) without hardcoding it.
+///
+/// Overflow is then hidden unless the box is actually clamped at `max`, so a row
+/// that fits never renders a scroll track.
+function autosize(area, max = 200) {
+  area.style.height = 'auto';
+  area.style.overflowY = 'hidden';
+  const chrome = area.offsetHeight - area.clientHeight;
+  const wanted = area.scrollHeight + chrome;
+  const clamped = wanted > max;
+  area.style.height = `${clamped ? max : wanted}px`;
+  area.style.overflowY = clamped ? 'auto' : 'hidden';
+}
+
+/// True while a transcript's speakers have been recognised but not attributed.
+function attributionPending() {
+  return !meDecided && distinctNames().length >= 2
+    && turns.every((turn) => turn.speaker === 'other');
+}
+
+// `intent` asks about "the other party's last few messages", so show which turns
+// that actually is: the trailing run of consecutive `other` turns.
+function judgedRange() {
+  // Before attribution every turn is `other`, so the trailing run would be the
+  // whole list. Highlighting all of it says nothing and looks like a valid result.
+  if (attributionPending()) return null;
+  let end = turns.length - 1;
+  while (end >= 0 && !turns[end].text.trim()) end -= 1;
+  if (end < 0 || turns[end].speaker !== 'other') return null;
+  let start = end;
+  while (start > 0 && turns[start - 1].speaker === 'other') start -= 1;
+  return [start, end];
+}
+
+function remapFlaggedAfterRemove(removed) {
+  const next = new Set();
+  flagged.forEach((index) => {
+    if (index === removed) return;
+    next.add(index > removed ? index - 1 : index);
+  });
+  flagged = next;
+}
+
+/// Index of the first turn actually rendered. Everything before it is folded.
+function firstVisible() {
+  if (foldOpen || turns.length <= FOLD_THRESHOLD) return 0;
+  return turns.length - FOLD_VISIBLE;
+}
+
+function renderTurns() {
+  const host = el('turns');
+  const range = judgedRange();
+  const start = firstVisible();
+  // Build detached, insert once: appending row by row into the live DOM makes the
+  // browser lay out the list again for every row.
+  const frag = document.createDocumentFragment();
+  const areas = [];
+
+  for (let index = start; index < turns.length; index += 1) {
+    const turn = turns[index];
+    const judged = range && index >= range[0] && index <= range[1];
+    const row = document.createElement('div');
+    row.className = `turn ${turn.speaker}${flagged.has(index) ? ' flagged' : ''}${judged ? ' judged' : ''}`;
+    row.dataset.index = String(index);
+    row.innerHTML = `
+      <select aria-label="第 ${index + 1} 条的说话人">${Object.entries(SPEAKER).map(([value, text]) =>
+        `<option value="${value}" ${value === turn.speaker ? 'selected' : ''}>${text}</option>`).join('')}</select>
+      <div class="turn-mid">
+        ${turn.name ? `<div class="turn-name" title="${esc(turn.name)}">${esc(turn.name)}</div>` : ''}
+        <textarea rows="1" aria-label="第 ${index + 1} 条内容" placeholder="这一条说了什么">${esc(turn.text)}</textarea>
+      </div>
+      <button type="button" aria-label="删除第 ${index + 1} 条" title="删除">&times;</button>`;
+    const select = row.querySelector('select');
+    const area = row.querySelector('textarea');
+    const remove = row.querySelector('button');
+
+    // Changing the speaker only changes styling, so patch the row in place --
+    // re-rendering here would steal focus and reset every textarea's height.
+    select.onchange = () => {
+      turns[index].speaker = select.value;
+      row.classList.toggle('me', select.value === 'me');
+      row.classList.toggle('other', select.value !== 'me');
+      row.querySelector('.turn-name')?.classList.toggle('me', select.value === 'me');
+      // A manual edit no longer matches "everything by this nickname is me".
+      if (meName && turn.name && turn.name !== meName && select.value === 'me') meName = '';
+      refreshJudged();
+      renderWhoami();
+      updateRunState();
+      persist();
+    };
+    area.oninput = () => {
+      turns[index].text = area.value;
+      autosize(area);
+      refreshJudged();
+      updateRunState();
+      persist();
+    };
+    remove.onclick = () => {
+      collect();
+      turns.splice(index, 1);
+      remapFlaggedAfterRemove(index);
+      renderTurns();
+      updateRunState();
+      persist();
+      const rendered = el('turns').querySelectorAll('textarea');
+      const offset = index - firstVisible();
+      (rendered[offset] || rendered[rendered.length - 1])?.focus();
+    };
+    frag.appendChild(row);
+    areas.push(area);
+  }
+
+  host.innerHTML = '';
+  host.appendChild(frag);
+  // scrollHeight forces layout, so measure only after everything is attached.
+  // Note the wrapper: passing `autosize` straight to forEach would hand it the
+  // element index as its `max` argument, clamping the first row to zero height.
+  areas.forEach((area) => autosize(area));
+  renderFold();
+  renderWhoami();
+  renderTurnsBar();
+  refreshJudged();
+}
+
+function renderFold() {
+  const hidden = firstVisible();
+  if (!hidden) {
+    el('fold').innerHTML = '';
+    return;
+  }
+  el('fold').innerHTML = `上面还有 ${hidden} 条
+    <button type="button" id="foldOpen">全部展开</button>·
+    <button type="button" id="foldTrim">只留最后 ${FOLD_VISIBLE} 条</button>`;
+  el('foldOpen').onclick = () => { foldOpen = true; renderTurns(); };
+  el('foldTrim').onclick = () => trimTo(FOLD_VISIBLE);
+}
+
+function trimTo(keep) {
+  const drop = turns.length - keep;
+  if (drop <= 0) return;
+  if (!confirm(`删掉前面 ${drop} 条，只保留最后 ${keep} 条？`)) return;
+  collect();
+  turns = turns.slice(drop);
+  // Flags point at positions, so they shift with the rows they mark.
+  const next = new Set();
+  flagged.forEach((i) => { if (i >= drop) next.add(i - drop); });
+  flagged = next;
+  foldOpen = false;
+  renderTurns();
+  updateRunState();
+  persist();
+}
+
+function distinctNames() {
+  const names = [];
+  turns.forEach((turn) => {
+    const name = (turn.name || '').trim();
+    if (name && !names.includes(name)) names.push(name);
+  });
+  return names;
+}
+
+/// A pasted transcript labels the user's own messages with their nickname, so the
+/// text cannot say which name is "me". Asking here, with the recognised names in
+/// hand, is both zero typing and immune to the mismatches a pre-filled nickname
+/// would suffer (renamed contacts, emoji in names).
+function renderWhoami() {
+  const names = distinctNames();
+  const host = el('whoami');
+  if (names.length < 2) {
+    host.innerHTML = '';
+    return;
+  }
+  host.className = `whoami${meDecided ? ' settled' : ''}`;
+  host.innerHTML = `<span class="q">${
+    meDecided
+      ? (meName ? '你是' : '这段对话里没有你')
+      : `识别到 ${names.length} 个说话人，哪个是你？`
+  }</span>
+    ${names.map((name) => `<button type="button" data-name="${esc(name)}"
+        aria-pressed="${meDecided && name === meName}">${esc(name)}</button>`).join('')}
+    <button type="button" data-name="" aria-pressed="${meDecided && !meName}">都不是我</button>`;
+  host.querySelectorAll('button').forEach((button) => {
+    button.onclick = () => assignMe(button.dataset.name);
+  });
+}
+
+function assignMe(name) {
+  collect();
+  meName = name;
+  meDecided = true;
+  turns = turns.map((turn) => ({
+    ...turn,
+    speaker: name && (turn.name || '').trim() === name ? 'me' : 'other',
+  }));
+  renderTurns();
+  updateRunState();
+  persist();
+}
+
+function invertSpeakers() {
+  collect();
+  const names = distinctNames();
+  // With exactly two people, inverting is the same as picking the other name --
+  // keep the two controls consistent instead of leaving a stale selection.
+  if (names.length === 2 && meName) {
+    assignMe(names.find((name) => name !== meName) || '');
+    return;
+  }
+  meName = '';
+  meDecided = true;
+  turns = turns.map((turn) => ({
+    ...turn,
+    speaker: turn.speaker === 'me' ? 'other' : 'me',
+  }));
+  renderTurns();
+  updateRunState();
+  persist();
+}
+
+function renderTurnsBar() {
+  const total = turns.length;
+  const host = el('turnsBar');
+  if (!total) {
+    host.innerHTML = '';
+    return;
+  }
+  const names = distinctNames();
+  const bits = [`共 ${total} 条`];
+  if (names.length) bits.push(`${names.length} 个说话人`);
+  if (flagged.size) bits.push(`<span class="warn">${flagged.size} 条待核对</span>`);
+  host.className = 'turns-bar';
+  host.innerHTML = `<span>${bits.join(' · ')}</span><span class="spacer"></span>
+    ${total > FOLD_THRESHOLD && foldOpen ? '<button type="button" id="barFold">收起</button>' : ''}
+    ${total > 20 ? '<button type="button" id="barTrim">只留最后 20 条</button>' : ''}`;
+  const fold = el('barFold');
+  if (fold) fold.onclick = () => { foldOpen = false; renderTurns(); };
+  const trim = el('barTrim');
+  if (trim) trim.onclick = () => trimTo(20);
+}
+
+function refreshJudged() {
+  const range = judgedRange();
+  [...el('turns').children].forEach((row) => {
+    const index = Number(row.dataset.index);
+    row.classList.toggle('judged', !!range && index >= range[0] && index <= range[1]);
+  });
+  renderTurnsNote();
+}
+
+function renderTurnsNote() {
+  const pending = attributionPending();
+  const range = judgedRange();
+  const parts = [];
+  if (pending) {
+    // Nothing can be said about "the other party's last messages" yet, and
+    // claiming the last line is the user's would be simply wrong.
+    parts.push('<b style="color:var(--warn)">先在上面指定哪个昵称是你</b>，否则整段都会被当成对方说的');
+  } else if (range) {
+    parts.push(range[0] === range[1]
+      ? `判断依据是<b>第 ${range[0] + 1} 条</b>（高亮那条）`
+      : `判断依据是<b>第 ${range[0] + 1}–${range[1] + 1} 条</b>（高亮部分）`);
+  } else if (hasContent()) {
+    parts.push('最后一条是「我」说的，对方还没有新消息');
+  }
+  if (flagged.size) {
+    // A long list can flag dozens of rows; enumerating them all is noise.
+    const marks = [...flagged].sort((a, b) => a - b).map((i) => i + 1);
+    parts.push(marks.length > 5
+      ? `<b style="color:var(--warn)">${marks.length} 条</b>模型识别时不确定，见黄色边框`
+      : `<b style="color:var(--warn)">第 ${marks.join('、')} 条</b>模型识别时不确定`);
+  }
+  if (!pending && meDecided && !meName && turns.length) {
+    parts.push('你不在这段对话里，「最佳动作」这一项不会有意义');
+  }
+  el('turnsNote').innerHTML = parts.join(' · ');
+}
+
+/// Pull the rendered rows back into state.
+///
+/// Only part of the list is in the DOM when it is folded, so this updates the
+/// rows it finds by their recorded index instead of rebuilding the array —
+/// rebuilding would silently discard every folded turn.
+function collect() {
+  [...el('turns').children].forEach((row) => {
+    const index = Number(row.dataset.index);
+    const turn = turns[index];
+    if (!turn) return;
+    turn.speaker = row.querySelector('select').value;
+    turn.text = row.querySelector('textarea').value;
+  });
+}
+
+function conversationPayload() {
+  collect();
+  return turns
+    .filter((turn) => turn.text.trim())
+    .map((turn) => {
+      const payload = { speaker: SPEAKER[turn.speaker], text: turn.text.trim() };
+      // Keep the nickname: in a group chat "对方" is several people, and the
+      // judgement reads differently if they cannot be told apart.
+      if (turn.name) payload.name = turn.name;
+      return payload;
+    });
+}
+</script>
+<script>
+/* ---------- output panel ---------- */
+
+// The panel is a set of stable slots rather than one innerHTML target, so a
+// re-run keeps the scroll position and the verdict does not blink out while the
+// slower drafting call is still running.
+function showEmpty(show) {
+  el('outEmpty').hidden = !show;
+}
+
+function clearOutput() {
+  ['outError', 'outVerdict', 'outDrafts', 'outRaw'].forEach((id) => { el(id).innerHTML = ''; });
+  showEmpty(false);
+}
+
+function showError(slot, message, detail, retryLabel, retryFn, soft) {
+  el(slot).innerHTML = `<div class="err${soft ? ' soft' : ''}">${esc(message)}${detail ? `\n\n${esc(detail)}` : ''}
+    ${retryFn ? `<div class="retry"><button type="button">${esc(retryLabel || '重试')}</button></div>` : ''}
+  </div>`;
+  if (retryFn) el(slot).querySelector('.retry button').onclick = retryFn;
+  showEmpty(false);
+}
+
+function cell(key, value, extra) {
+  const shaky = extra?.shaky ? ' shaky' : '';
+  const conf = extra?.conf != null
+    ? `<div class="track"><div class="fill" style="width:${(extra.conf * 100).toFixed(0)}%"></div></div>`
+    : '';
+  const note = extra?.note ? `<small>${esc(extra.note)}</small>` : '';
+  return `<div class="cell${shaky}">
+    <div class="k">${esc(key)}</div>
+    <div class="v">${esc(value)}${note}</div>
+    ${conf}
+  </div>`;
+}
+
+function renderVerdict(data) {
+  const a = data.answers || {};
+  const dangerScore = a.danger?.score ?? 0;
+  const level = dangerScore >= 2.5 ? 3 : dangerScore >= 1.5 ? 2 : 1;
+  const replyNow = a.reply_now?.noul ?? 0;
+  // Around 0.5 the model cannot tell, which is not "somewhat" -- flag it.
+  const replyShaky = Math.abs(replyNow - 0.5) < 0.15;
+
+  const usage = data.usage || {};
+  const cost = usage.cost != null ? `$${Number(usage.cost).toFixed(6)}` : '—';
+
+  return `
+    <div class="stage">判断 <b>${data.latency_ms ?? '—'}ms</b> · ${esc(cost)} · ${usage.input_tokens ?? '—'} tok</div>
+
+    <div class="danger lvl${level}">
+      <div class="danger-num">${dangerScore.toFixed(1)}</div>
+      <div class="danger-txt">
+        <div class="t">${esc(DANGER[Math.round(dangerScore)] ?? '—')}</div>
+        <div class="s">危险等级 ${dangerScore.toFixed(2)} / 3 · 把握度 ${(a.danger?.confidence ?? 0).toFixed(2)}</div>
+      </div>
+    </div>
+
+    <div class="grid">
+      ${cell('对方意图', LABEL.intent[a.intent?.choice] ?? a.intent?.choice ?? '—', { conf: a.intent?.confidence })}
+      ${cell('对方想要', LABEL.wants[a.wants?.choice] ?? a.wants?.choice ?? '—', { conf: a.wants?.confidence })}
+      ${cell('该马上回吗', replyNow >= 0.5 ? '该回' : '可以缓', {
+        conf: replyNow >= 0.5 ? replyNow : 1 - replyNow,
+        shaky: replyShaky,
+        note: replyShaky ? '接近 0.5，模型无法区分' : `P=${replyNow.toFixed(2)}`
+      })}
+      ${cell('最佳动作', LABEL.best_action[a.best_action?.choice] ?? a.best_action?.choice ?? '—', { conf: a.best_action?.confidence })}
+      ${cell('对方风格', LABEL.counterpart_style[a.counterpart_style?.choice] ?? a.counterpart_style?.choice ?? '—', { conf: a.counterpart_style?.confidence })}
+      ${cell('对方施压', PRESSURE[Math.round(a.pressure?.score ?? 0)] ?? '—', {
+        conf: a.pressure?.confidence,
+        note: `${(a.pressure?.score ?? 0).toFixed(1)} / 2`
+      })}
+    </div>`;
+}
+
+function draftSkeleton() {
+  const card = `<div class="skel-card">
+    <div class="skel-line" style="width:32%"></div>
+    <div class="skel-line" style="width:92%"></div>
+    <div class="skel-line" style="width:68%"></div>
+  </div>`;
+  return `<div class="drafts-head">
+      <h2>候选回复</h2><span class="n">起草中…</span>
+    </div>${card.repeat(3)}`;
+}
+
+/* ---------- drafts ---------- */
+
+// Text lives in JS, not in a data-* attribute: drafts are multi-line and the
+// user is expected to tweak them before sending, so the card owns editable state.
+let draftCards = [];
+
+function renderDrafts(data) {
+  const best = data.ranking?.choice;
+  const probabilities = data.ranking?.probabilities || {};
+  draftCards = data.drafts
+    .map((text, index) => ({
+      id: `draft_${index + 1}`,
+      original: text,
+      text,
+      p: probabilities[`draft_${index + 1}`] ?? null,
+    }))
+    .sort((x, y) => (y.p ?? -1) - (x.p ?? -1));
+
+  const cost = (Number(data.rank_cost) || 0).toFixed(6);
+  const host = el('outDrafts');
+  host.innerHTML = `<div class="drafts-head">
+      <h2>候选回复</h2>
+      <span class="n">起草 ${data.draft_ms}ms · 排序 ${data.rank_ms}ms · 排序 $${cost}</span>
+    </div>
+    ${data.rank_error ? `<div class="warnbar">排序失败，候选按原顺序展示：${esc(data.rank_error.error || '')}</div>` : ''}
+    <div id="draftList"></div>`;
+
+  const list = el('draftList');
+  draftCards.forEach((card, position) => {
+    list.appendChild(draftCard(card, position, card.id === best));
+  });
+}
+
+function draftCard(card, position, isBest) {
+  const node = document.createElement('div');
+  node.className = `draft${isBest ? ' best' : ''}`;
+  node.innerHTML = `
+    <div class="draft-top">
+      <span class="draft-rank">#${position + 1}</span>
+      ${isBest ? '<span class="badge">最合适</span>' : ''}
+      <span class="badge edited" hidden>已改</span>
+      ${card.p != null ? `<span class="draft-p">${(card.p * 100).toFixed(0)}%</span>` : ''}
+    </div>
+    <div class="draft-body"></div>
+    <textarea class="draft-edit" hidden aria-label="编辑第 ${position + 1} 条候选回复"></textarea>
+    <div class="draft-acts">
+      <button class="ghost" type="button" data-act="copy">复制</button>
+      <button class="ghost" type="button" data-act="edit">编辑</button>
+      <button class="ghost" type="button" data-act="reset" hidden>还原</button>
+    </div>`;
+
+  const body = node.querySelector('.draft-body');
+  const area = node.querySelector('.draft-edit');
+  const editedBadge = node.querySelector('.badge.edited');
+  const copyBtn = node.querySelector('[data-act="copy"]');
+  const editBtn = node.querySelector('[data-act="edit"]');
+  const resetBtn = node.querySelector('[data-act="reset"]');
+
+  const sync = () => {
+    body.textContent = card.text;
+    const dirty = card.text !== card.original;
+    editedBadge.hidden = !dirty;
+    resetBtn.hidden = !dirty;
+  };
+  sync();
+
+  editBtn.onclick = () => {
+    const editing = area.hidden;
+    if (editing) {
+      area.value = card.text;
+      area.hidden = false;
+      body.hidden = true;
+      editBtn.textContent = '完成';
+      autosize(area, 260);
+      area.focus();
+    } else {
+      card.text = area.value;
+      area.hidden = true;
+      body.hidden = false;
+      editBtn.textContent = '编辑';
+      sync();
+    }
+  };
+  area.oninput = () => {
+    card.text = area.value;
+    autosize(area, 260);
+    const dirty = card.text !== card.original;
+    editedBadge.hidden = !dirty;
+    resetBtn.hidden = !dirty;
+  };
+  resetBtn.onclick = () => {
+    card.text = card.original;
+    if (!area.hidden) area.value = card.text;
+    sync();
+  };
+  copyBtn.onclick = () => copyText(card.text, copyBtn);
+
+  return node;
+}
+
+async function copyText(text, button) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Clipboard API needs a secure context; fall back to a temp textarea.
+    const area = document.createElement('textarea');
+    area.value = text;
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand('copy');
+    area.remove();
+  }
+  const original = button.textContent;
+  button.textContent = '已复制';
+  button.classList.add('copied');
+  setTimeout(() => { button.textContent = original; button.classList.remove('copied'); }, 1400);
+}
+</script>
+<script>
+/* ---------- settings / bring-your-own-key ---------- */
+
+const SETTINGS_KEY = 'jev-copilot:settings:v1';
+// Kept separate from the conversation draft so "清除 Key" cannot take the user's
+// in-progress work with it, and clearing the conversation cannot drop the key.
+let settings = { key: '', judgeModel: '', draftModel: '', visionModel: '' };
+let defaults = { judge: '', draft: '', vision: '' };
+
+function loadSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null');
+    if (saved && typeof saved === 'object') {
+      settings = {
+        key: typeof saved.key === 'string' ? saved.key.trim() : '',
+        judgeModel: saved.judgeModel || '',
+        draftModel: saved.draftModel || '',
+        visionModel: saved.visionModel || '',
+      };
+    }
+  } catch {
+    // Corrupt entry: fall back to empty settings rather than breaking startup.
+  }
+}
+
+function saveSettings() {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch {
+    setStatus('无法写入浏览器存储，Key 只在本次会话有效');
+  }
+}
+
+function hasKey() {
+  return !!settings.key;
+}
+
+// The server never receives a model it did not offer as a default, and never
+// receives a base URL at all -- letting the client pick the endpoint would turn
+// the proxy into a credential forwarder for any host.
+function withModels(body, which) {
+  const extra = {};
+  if (which.includes('judge') && settings.judgeModel) extra.model = settings.judgeModel;
+  if (which.includes('draft') && settings.draftModel) extra.model = settings.draftModel;
+  if (which.includes('draft') && settings.judgeModel) extra.judge_model = settings.judgeModel;
+  if (which.includes('vision') && settings.visionModel) extra.model = settings.visionModel;
+  return { ...body, ...extra };
+}
+
+function apiFetch(path, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (options.body) headers['Content-Type'] = 'application/json';
+  if (hasKey()) headers['X-Jev-Key'] = settings.key;
+  return fetch(path, { ...options, headers });
+}
+
+/// A 401 from our own server means "no key configured"; put the user in front of
+/// the field instead of making them decode an error.
+function handledNeedKey(data) {
+  if (!data || !data.need_key) return false;
+  openSettings('先填入你的 OpenRouter Key');
+  return true;
+}
+
+function renderMeta() {
+  const judge = settings.judgeModel || defaults.judge || '—';
+  const draft = settings.draftModel || defaults.draft || '—';
+  const vision = settings.visionModel || defaults.vision || '—';
+  el('meta').textContent = `判断 ${judge} · 起草 ${draft} · 视觉 ${vision}`;
+  el('gear').classList.toggle('missing', !hasKey());
+  el('gear').textContent = hasKey() ? '⚙ 设置' : '⚙ 填写 Key';
+}
+
+let gearReturnFocus = null;
+
+function openSettings(message) {
+  el('keyInput').value = settings.key;
+  el('judgeModel').value = settings.judgeModel;
+  el('draftModel').value = settings.draftModel;
+  el('visionModel').value = settings.visionModel;
+  el('judgeModel').placeholder = defaults.judge || '';
+  el('draftModel').placeholder = defaults.draft || '';
+  el('visionModel').placeholder = defaults.vision || '';
+  el('probeOut').innerHTML = message ? `<div class="probe">${esc(message)}</div>` : '';
+  el('settings').hidden = false;
+  gearReturnFocus = document.activeElement;
+  el('keyInput').focus();
+}
+
+function closeSettings() {
+  el('settings').hidden = true;
+  // The dialog can open with focus on <body> (first visit, opened by script), and
+  // <body> is not focusable, so focus would be left nowhere. Fall back to the gear.
+  const back = gearReturnFocus;
+  const target = back instanceof HTMLElement && back !== document.body && back.isConnected
+    ? back
+    : el('gear');
+  target.focus();
+}
+
+function commitSettings() {
+  settings = {
+    key: el('keyInput').value.trim(),
+    judgeModel: el('judgeModel').value.trim(),
+    draftModel: el('draftModel').value.trim(),
+    visionModel: el('visionModel').value.trim(),
+  };
+  saveSettings();
+  renderMeta();
+  updateRunState();
+  refreshGating();
+}
+
+async function runProbe() {
+  const candidate = el('keyInput').value.trim();
+  if (!candidate) {
+    el('probeOut').innerHTML = '<div class="probe bad">先填入 Key</div>';
+    return;
+  }
+  el('probeOut').innerHTML = '<div class="probe"><span class="spin">◠</span> 正在验证…</div>';
+  el('probeBtn').disabled = true;
+  try {
+    const response = await fetch('/api/probe', { headers: { 'X-Jev-Key': candidate } });
+    const data = await response.json();
+    if (data.ok) {
+      const bits = [];
+      if (data.label) bits.push(esc(data.label));
+      if (data.limit_remaining != null) bits.push(`余额 $${Number(data.limit_remaining).toFixed(2)}`);
+      else if (data.limit == null) bits.push('无额度上限');
+      if (data.usage != null) bits.push(`已用 $${Number(data.usage).toFixed(4)}`);
+      if (data.is_free_tier === true) bits.push('免费档');
+      el('probeOut').innerHTML = `<div class="probe ok">Key 可用${
+        bits.length ? `<br><span class="sub">${bits.join(' · ')}</span>` : ''}</div>`;
+    } else {
+      el('probeOut').innerHTML = `<div class="probe bad">${esc(data.error || '验证失败')}${
+        data.detail ? `<br><span class="sub">${esc(String(data.detail).slice(0, 200))}</span>` : ''}</div>`;
+    }
+  } catch (error) {
+    el('probeOut').innerHTML = `<div class="probe bad">请求失败：${esc(error.message)}</div>`;
+  } finally {
+    el('probeBtn').disabled = false;
+  }
+}
+
+/// Without a key nothing can be recognised or analysed, so the inputs that cost
+/// money are disabled rather than left to fail at the API.
+function refreshGating() {
+  const locked = !hasKey();
+  el('drop').setAttribute('aria-disabled', locked || busy === 'vision' ? 'true' : 'false');
+  el('drop').title = locked ? '先在设置里填入 Key' : '';
+  if (document.querySelector('#outVerdict *')) return;
+  el('outEmpty').textContent = locked
+    ? '先在右上角设置里填入你的 OpenRouter Key'
+    : hasContent()
+      ? '对话已就绪，点「分析并起草」或按 Ctrl+Enter'
+      : '粘贴一张聊天截图，或把聊天记录贴进来';
+  showEmpty(true);
+}
+
+function initSettings() {
+  el('gear').onclick = () => openSettings();
+  el('closeSettings').onclick = closeSettings;
+  el('probeBtn').onclick = runProbe;
+  el('saveSettings').onclick = () => {
+    commitSettings();
+    closeSettings();
+    setStatus(hasKey() ? 'Key 已保存在本浏览器' : 'Key 已清空');
+  };
+  el('clearKey').onclick = () => {
+    if (!confirm('清除这台浏览器里保存的 Key？对话内容不会受影响。')) return;
+    el('keyInput').value = '';
+    commitSettings();
+    el('probeOut').innerHTML = '<div class="probe">已清除</div>';
+  };
+  el('keyReveal').onclick = () => {
+    const field = el('keyInput');
+    const shown = field.type === 'text';
+    field.type = shown ? 'password' : 'text';
+    el('keyReveal').textContent = shown ? '显示' : '隐藏';
+  };
+  el('settings').onclick = (event) => {
+    if (event.target === el('settings') && hasKey()) closeSettings();
+  };
+  el('keyInput').onkeydown = (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      el('saveSettings').click();
+    }
+  };
+}
+
+loadSettings();
+</script>
+
+<script>
+/* ---------- pipeline ---------- */
+
+let lastInput = null;
+
+async function postJson(path, body, signal) {
+  const response = await apiFetch(path, { method: 'POST', body: JSON.stringify(body), signal });
+  let data;
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
+  if (!response.ok || data.error) {
+    return {
+      __error: data.error || `HTTP ${response.status}`,
+      __detail: data.detail || '',
+      __needKey: !!data.need_key,
+    };
+  }
+  return data;
+}
+
+function renderRaw(judgeData, draftData) {
+  el('outRaw').innerHTML = `<details class="raw"><summary>原始响应</summary><pre>${
+    esc(JSON.stringify({ judge: judgeData, draft: draftData }, null, 2))}</pre></details>`;
+}
+
+async function run() {
+  if (!hasKey()) {
+    openSettings('先填入你的 OpenRouter Key');
+    return;
+  }
+  const conversation = conversationPayload();
+  if (!conversation.length) {
+    clearOutput();
+    showError('outError', '至少需要一条对话内容', '', null, null, true);
+    return;
+  }
+  const background = el('background').value.trim() || null;
+
+  clearOutput();
+  const controller = new AbortController();
+  runAbort = controller;
+  setBusy('analyze');
+  setStatus('判断中…', true);
+
+  try {
+    const judgeData = await postJson(
+      '/api/judge',
+      withModels({ conversation, background }, 'judge'),
+      controller.signal,
+    );
+    if (judgeData.__error) {
+      if (judgeData.__needKey) {
+        openSettings('先填入你的 OpenRouter Key');
+        return;
+      }
+      showError('outError', `判断失败：${judgeData.__error}`, judgeData.__detail, '重新分析', run);
+      return;
+    }
+    verdict = judgeData.answers;
+    lastInput = { conversation, background, judgeData };
+    // Show the verdict immediately; drafting takes several seconds more.
+    el('outVerdict').innerHTML = renderVerdict(judgeData);
+    await draftStage(controller);
+  } catch (error) {
+    if (error.name === 'AbortError') return;
+    showError('outError', `请求失败：${error.message}`, '', '重新分析', run);
+  } finally {
+    if (runAbort === controller) {
+      runAbort = null;
+      setBusy(null);
+      setStatus('');
+    }
+  }
+}
+
+// Drafting is a separate stage so a failure here can be retried on its own --
+// the verdict above it is still valid and cost real money to produce.
+async function draftStage(controller) {
+  const { conversation, background, judgeData } = lastInput;
+  setStatus('起草候选…', true);
+  el('outDrafts').innerHTML = draftSkeleton();
+
+  const draftData = await postJson(
+    '/api/draft',
+    withModels({ conversation, background, verdict: judgeData.answers }, 'draft'),
+    controller.signal,
+  );
+  if (draftData.__error) {
+    el('outDrafts').innerHTML = '';
+    if (draftData.__needKey) {
+      openSettings('先填入你的 OpenRouter Key');
+      return;
+    }
+    showError('outDrafts', `起草失败：${draftData.__error}`, draftData.__detail, '重新起草', retryDraft);
+    return;
+  }
+  renderDrafts(draftData);
+  renderRaw(judgeData, draftData);
+}
+
+async function retryDraft() {
+  if (busy || !lastInput) return;
+  const controller = new AbortController();
+  runAbort = controller;
+  setBusy('analyze');
+  try {
+    await draftStage(controller);
+  } catch (error) {
+    if (error.name === 'AbortError') return;
+    el('outDrafts').innerHTML = '';
+    showError('outDrafts', `起草请求失败：${error.message}`, '', '重新起草', retryDraft);
+  } finally {
+    if (runAbort === controller) {
+      runAbort = null;
+      setBusy(null);
+      setStatus('');
+    }
+  }
+}
+
+/* ---------- events ---------- */
+
+document.addEventListener('paste', (event) => {
+  const clipboard = event.clipboardData;
+  const items = [...(clipboard?.items || [])];
+  const image = items.find((item) => item.type.startsWith('image/'));
+  if (!image) return;
+  // Pasting into a text field with text on the clipboard is a text paste, even
+  // if an image rides along; only hijack it when the clipboard is image-only.
+  const target = event.target;
+  const inField = target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement;
+  const hasText = items.some((item) => item.kind === 'string');
+  if (inField && hasText) return;
+  event.preventDefault();
+  acceptFile(image.getAsFile());
+});
+
+const drop = el('drop');
+const openPicker = () => {
+  if (drop.getAttribute('aria-disabled') === 'true') return;
+  el('file').click();
+};
+drop.onclick = openPicker;
+drop.onkeydown = (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    openPicker();
+  }
+};
+drop.ondragover = (event) => {
+  event.preventDefault();
+  if (drop.getAttribute('aria-disabled') !== 'true') drop.classList.add('over');
+};
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = (event) => {
+  event.preventDefault();
+  drop.classList.remove('over');
+  if (drop.getAttribute('aria-disabled') === 'true') return;
+  acceptFile(event.dataTransfer?.files?.[0]);
+};
+el('file').onchange = (event) => {
+  acceptFile(event.target.files?.[0]);
+  // Reset so picking the same file twice still fires a change event.
+  event.target.value = '';
+};
+
+document.querySelectorAll('[data-speaker]').forEach((button) => {
+  button.onclick = () => {
+    collect();
+    turns.push({ speaker: button.dataset.speaker, name: '', text: '' });
+    // A new row is appended at the end, which is always inside the visible tail.
+    renderTurns();
+    updateRunState();
+    persist();
+    const areas = el('turns').querySelectorAll('textarea');
+    areas[areas.length - 1]?.focus();
+  };
+});
+
+el('invert').onclick = () => {
+  collect();
+  if (!hasContent()) return;
+  invertSpeakers();
+};
+
+/* source tabs */
+document.querySelectorAll('[role="tab"]').forEach((tab) => {
+  tab.onclick = () => {
+    document.querySelectorAll('[role="tab"]').forEach((other) => {
+      const active = other === tab;
+      other.setAttribute('aria-selected', String(active));
+      el(`pane-${other.dataset.tab}`).hidden = !active;
+    });
+    if (tab.dataset.tab === 'text') el('importText').focus();
+  };
+});
+
+el('importText').oninput = updateImportCount;
+el('importRun').onclick = runImport;
+el('importClear').onclick = () => {
+  el('importText').value = '';
+  importError('');
+  el('importSummary').innerHTML = '';
+  updateImportCount();
+  el('importText').focus();
+};
+// Ctrl+Enter inside the paste box means "recognise", not "analyse": the list
+// downstream does not exist yet.
+el('importText').onkeydown = (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!el('importRun').disabled) runImport();
+  }
+};
+
+el('clear').onclick = () => {
+  collect();
+  if (hasContent() && !confirm(`确定清空这 ${turns.length} 条对话吗？识别结果无法恢复。`)) return;
+  turns = [];
+  flagged.clear();
+  meName = '';
+  meDecided = false;
+  foldOpen = false;
+  renderTurns();
+  updateRunState();
+  persist();
+};
+
+el('cancel').onclick = () => cancelAll('user cancelled');
+el('run').onclick = run;
+
+el('background').oninput = persist;
+
+document.addEventListener('keydown', (event) => {
+  // While the dialog is open it owns Escape; otherwise Escape cancels a request.
+  if (event.key === 'Escape' && !el('settings').hidden) {
+    event.preventDefault();
+    if (hasKey()) closeSettings();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+    event.preventDefault();
+    if (!el('run').disabled) run();
+  }
+  if (event.key === 'Escape' && busy) {
+    event.preventDefault();
+    cancelAll('escape');
+  }
+});
+
+fetch('/api/config').then((r) => r.json()).then((c) => {
+  defaults = { judge: c.judge.model, draft: c.draft.model, vision: c.vision.model };
+  renderMeta();
+  // The server keeps no credentials, so a first-time visitor must supply one
+  // before anything can run. Show the field rather than waiting for a failure.
+  if (c.byok && !hasKey()) openSettings('这个工具用你自己的 OpenRouter Key，填一次就存在本浏览器里');
+}).catch(() => { el('meta').textContent = 'config unavailable'; });
+
+/* ---------- init ---------- */
+
+// Ctrl+V is not a thing on a touch device; point at the file picker instead.
+if (matchMedia('(hover: none)').matches) {
+  el('drop-main').innerHTML = '点这里<b>选择截图</b>';
+  el('drop-sub').textContent = '从相册或文件里挑一张聊天截图';
+  el('shortcut').hidden = true;
+}
+
+initSettings();
+renderMeta();
+restore();
+renderTurns();
+updateImportCount();
+updateRunState();
+showEmpty(true);
+if (!hasKey()) {
+  el('outEmpty').textContent = '先在右上角设置里填入你的 OpenRouter Key';
+} else if (hasContent()) {
+  el('outEmpty').textContent = '对话已就绪，点「分析并起草」或按 Ctrl+Enter';
+  setStatus('已恢复上次未提交的对话');
+}
+refreshGating();
+</script>
+</body>
+</html>

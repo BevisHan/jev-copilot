@@ -1,0 +1,17 @@
+[package]
+name = "jev-copilot"
+version = "0.1.0"
+edition = "2021"
+
+# Same synchronous stack as jev-lab: one static page plus a few proxy routes.
+# No async runtime needed for a single-user local tool.
+[dependencies]
+tiny_http = "0.12"
+ureq = { version = "2.10", features = ["json", "tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true

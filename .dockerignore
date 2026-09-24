@@ -1,0 +1,29 @@
+# Build output: the image compiles from scratch, and a Windows target/ directory
+# would be both useless and huge in the build context.
+target/
+
+# Version control and editor state.
+.git/
+.gitignore
+.kiro/
+.vscode/
+
+# Credentials never belong in an image. This project's .env holds only endpoints
+# and model names, but excluding it is the invariant worth keeping.
+.env
+.env.*
+
+# Local test harness: fixture, e2e runner, model benches, and their outputs.
+_*.ps1
+_*.json
+_*.html
+_*.log
+_*.txt
+
+# Docker metadata itself.
+Dockerfile
+.dockerignore
+docker-compose*.yml
+Caddyfile
+README*
+*.md
